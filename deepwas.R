@@ -14,11 +14,14 @@ DEEPSEA.DIR <- '~/Deepsea'
 
 snps <- read.csv('data/snps.txt', stringsAsFactors=F, col.names='snps')$snps
 
-# DeepSEA run takes time, let's read the pre-saved result file
-#outdir <- rundeepsea(snps, DEEPSEA.DIR)
-#snp.eval <- get.significant.snps(snps, outdir)
+# Run deepsea or use existing file
+if (file.exists('data/evalues.tsv')) {
+  snp.eval <- read.delim('data/evalues.tsv', stringsAsFactors = F)
+} else {
+  outdir <- rundeepsea(snps, DEEPSEA.DIR)
+  snp.eval <- get.significant.snps(snps, outdir)
+}
 
-snp.eval <- read.delim('data/evalues.tsv', stringsAsFactors = F)
 summary(snp.eval)
 snp.eval.split <- split(snp.eval$snp, 
                         snp.eval$mineval.feature)
