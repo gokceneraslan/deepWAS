@@ -23,11 +23,11 @@ if (file.exists('data/evalues.tsv')) {
 }
 
 summary(snp.eval)
-snp.eval.split <- split(snp.eval$snp, 
+snp.eval.split <- split(snp.eval$snp,
                         snp.eval$mineval.feature)
 
 # Visualize number of SNPs we have for each deepse feature
-qplot(sapply(snp.eval.split, length), bins=100, color=I('white')) + 
+qplot(sapply(snp.eval.split, length), bins=100, color=I('white')) +
   labs(x='Model feature sizes') +
   theme_minimal()
 
@@ -62,7 +62,7 @@ if (file.exists('data/models.Rds')) {
     print(feature)
     mat <- cbind(as(pl$genotypes[, snp.eval.split[[feature]]], 'numeric'),
                  covar)
-    
+
     fit <- cv.glmnet(mat,
                      response,
                      nfolds = 100,
@@ -70,7 +70,7 @@ if (file.exists('data/models.Rds')) {
                      family='binomial')
     fit
   }, mc.cores = 12)
-  
+
   names(cv.fits) <- features.uniq
   saveRDS(cv.fits, 'data/models.Rds')
 }
@@ -84,24 +84,25 @@ perm.index <- sapply(seq_len(nperm), function(x)sample(ind.ids))
 stopifnot(ncol(perm.index) == nperm)
 
 if (file.exists('data/permutation_models.Rds')) {
-  
+
   U <- readRDS('data/permutation_models.Rds')
-  
+
 } else {
   U <- mclapply(features.uniq, function(feature) {
-    
+
     print(feature)
-    mat <- cbind(mat,
+
+    mat <- cbind(as(pl$genotypes[, snp.eval.split[[feature]]], 'numeric'),
                  covar)
-    
+
     fit <- glmnet(mat,
                   response,
                   alpha=1,
                   lambda = cv.fits[[feature]]$lambda.1se,
                   family='binomial')
-    
+
     devi <- lapply(seq_len(nperm), function(ix){
-      
+
       # Use shuffled response here
       f <- cv.glmnet(mat,
                      response[perm.index[,ix]],
@@ -114,7 +115,7 @@ if (file.exists('data/permutation_models.Rds')) {
              lambda = f$lambda.1se,
              family='binomial')
     })
-    
+
     list(fit=fit, devi=devi)
   }, mc.cores = 12)
 
