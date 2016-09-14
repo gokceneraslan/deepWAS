@@ -1,35 +1,72 @@
-#!/usr/bin/env Rscript
+---
+title: "DeepWAS: Directly integrating regulatory information into GWAS using deep learning"
+author: "Gökcen Eraslan, Janine Arloth, Jade Martins, Stella Iurato, Darina Czamara, Elisabeth B. Binder, Fabian J. Theis, Nikola S. Mueller"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: false
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    toc_depth: 3
+vignette: >
+  %\VignetteIndexEntry{DeepWAS: Directly integrating regulatory information into GWAS using deep learning}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+# Introduction
+
+In our [study](http://biorxiv.org/content/early/2016/08/11/069096), we showed that deep learning-based prediction methods can improve our understanding on diseases. This document is prepared to guide you through the code we used in our study.
+
+# Prerequisites
+
+`glmnet` and `ggplot2` are used for the visualization, whereas `snpStats` was used to read PLINK-formatted files. If you want to run DeepSEA from scratch, please check out additional R files on the [Github repository](https://github.com/gokceneraslan/deepwas).
+
+```{r, warning=F, message=F}
 
 library(snpStats)
 library(ggplot2)
 library(glmnet)
 library(parallel)
 
-source('rundeepsea.R')
-
-DEEPSEA.DIR <- '~/Deepsea'
-
 
 # Run DeepSEA -------------------------------------------------------------
-
-snps <- read.csv('data/snps.txt', stringsAsFactors=F, col.names='snps')$snps
 
 # Run deepsea or use existing file
 if (file.exists('data/evalues.tsv')) {
   snp.eval <- read.delim('data/evalues.tsv', stringsAsFactors = F)
 } else {
-  outdir <- rundeepsea(snps, DEEPSEA.DIR)
+  source('rundeepsea.R')
+  deepsea.dir <- ''
+
+  outdir <- rundeepsea(snps, deepsea.dir)
   snp.eval <- get.significant.snps(snps, outdir)
 }
 
-summary(snp.eval)
+snps <- unique(snp.eval$snp)
+qplot(-log10(snp.eval$mineval),
+      color=I('white'),
+      bins=60,
+      xlab='-log10 transformed e-values') +
+  theme_minimal()
+```
+
+```{r}
+
 snp.eval.split <- split(snp.eval$snp,
                         snp.eval$mineval.feature)
 
 # Visualize number of SNPs we have for each deepse feature
-qplot(sapply(snp.eval.split, length), bins=100, color=I('white')) +
-  labs(x='Model feature sizes') +
+qplot(sapply(snp.eval.split, length), bins=100,
+      color=I('white'),
+      xlab='Model feature sizes') +
   theme_minimal()
+
+```
+
+```{r, eval=F}
 
 # Save names of DeepSEA features
 features.uniq <- unique(snp.eval$mineval.feature)
@@ -50,9 +87,13 @@ pl$genotypes <- pl$genotypes[cc.index,]
 covar <- covar[cc.index,]
 response <- response[cc.index]
 ind.ids <- ind.ids[cc.index]
+```
 
+# Multi-locus regression
 
+```{r, eval=F}
 # Regression --------------------------------------------------------------
+
 
 if (file.exists('data/models.Rds')) {
   cv.fits <- readRDS('data/models.Rds')
@@ -74,8 +115,12 @@ if (file.exists('data/models.Rds')) {
   names(cv.fits) <- features.uniq
   saveRDS(cv.fits, 'data/models.Rds')
 }
+```
 
 
+# Model selection
+
+```{r, eval=F}
 # Model selection ---------------------------------------------------------
 
 # Let's fit models on shuffled response
@@ -133,4 +178,7 @@ D <- sapply(U, function(model)sapply(model[-1], function(model)model$dev.ratio))
 D <- t(D)
 D <- D[model.order,] #sort models based on the dev.ratio of the main model
 #pheatmap(D, cluster_rows = F)
+
+
+```
 
