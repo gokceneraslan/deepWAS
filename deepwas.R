@@ -50,6 +50,7 @@ pl$genotypes <- pl$genotypes[cc.index,]
 covar <- covar[cc.index,]
 response <- response[cc.index]
 ind.ids <- ind.ids[cc.index]
+names(response) <- rownames(pl$genotypes)
 
 
 # Regression --------------------------------------------------------------
