@@ -1,7 +1,7 @@
 ---
-title: "DeepWAS: Directly integrating regulatory information into GWAS using deep learning"
-author: "Gökcen Eraslan, Janine Arloth, Jade Martins, Stella Iurato, Darina Czamara, Elisabeth B. Binder, Fabian J. Theis, Nikola S. Mueller"
-date: "`r Sys.Date()`"
+#title: "DeepWAS: Directly integrating regulatory information into GWAS using deep learning"
+#author: "Gökcen Eraslan, Janine Arloth, Jade Martins, Stella Iurato, Darina Czamara, Elisabeth B. Binder, Fabian J. Theis, Nikola S. Mueller"
+#date: "`r Sys.Date()`"
 output:
   html_document:
     fig_caption: false
@@ -16,22 +16,41 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-# Introduction
+###DeepWAS: Directly integrating regulatory information into GWAS using deep learning
+<hr />
 
-In our [study](http://biorxiv.org/content/early/2016/08/11/069096), we showed that deep learning-based prediction methods can improve our understanding on diseases. This document is prepared to guide you through the code we used in our study.
 
-# Prerequisites
+## Introduction
 
-`glmnet` and `ggplot2` are used for the visualization, whereas `snpStats` was used to read PLINK-formatted files. If you want to run DeepSEA from scratch, please check out additional R files on the [Github repository](https://github.com/gokceneraslan/deepwas).
+DeepWAS [project](http://biorxiv.org/content/early/2016/08/11/069096) showed that deep learning of regulatory variant effects can improve our understanding on diseases. In a proof-of-concept study, we applied the approach to a major depression disorder (MDD) case/control cohort to interrogate putative non-coding causal variants of MDD. The aim of this document is to guide you through the code we used in our study.
+
+## Prerequisites
+
+`glmnet`, `ggplot2`, `ggrepel`, `gplots` and `RColorBrewer` packages are used for the visualization, whereas `snpStats` was used to read PLINK-formatted genotype and phenotype files. If you want to run DeepSEA from scratch, please check out additional R helper files on the [Github repository](https://github.com/gokceneraslan/deepwas) to run DeepSEA from within the R code conveniently.
 
 ```{r, warning=F, message=F}
-
+#Bioconductor
 library(snpStats)
+
+#Visualization and reporting
 library(ggplot2)
+library(ggrepel)
+library(RColorBrewer)
+library(gplots)
+library(printr) # install from https://github.com/yihui/printr
+
+#Regression, parallelization and data tidying
 library(glmnet)
 library(parallel)
+library(tidyr)
+```
+## Analysis
 
+### Deep learning
 
+Deep-learning methods have been proposed to make highly accurate predictions of various chromatin features and transcription factor binding sites using the DNA sequences of a given genomic range. Here we use DeepSEA to assess the regulatory impact of each variant we genotyped (and imputed) from the case/control cohort. Since deep learning part takes time (~12 hours per 1M variants with a Titan X and a magnetic disk where I/O takes %90 of time), here we'll be using an existing file with variant e-values.
+
+```{r}
 # Run DeepSEA -------------------------------------------------------------
 
 # Run deepsea or use existing file
@@ -45,32 +64,46 @@ if (file.exists('data/evalues.tsv')) {
   snp.eval <- get.significant.snps(snps, outdir)
 }
 
+head(snp.eval)
+```
+
+This is how the predictions look like. Below we see the e-value distribution of our variants. Note that only the variants with evalue < 5e-5 are shown and are considered in the rest of the analysis. The lowest e-value is 1e-6 since there are 1M snps in the background distribution of DeepSEA.
+
+
+```{r}
 snps <- unique(snp.eval$snp)
-qplot(-log10(snp.eval$mineval),
+qplot((snp.eval$mineval),
       color=I('white'),
-      bins=60,
-      xlab='-log10 transformed e-values') +
+      bins=60, log='x',
+      xlab='e-values (log10)') +
   theme_minimal()
 ```
+
+
+Next step is to group variants per {cell line, chromatin feature, treatment} triplet (e.g. `X8988T.DNase.None`), which is called a functional unit in the paper. We can plot the distribution of number of variants we have in each of 919 groups.
 
 ```{r}
 
 snp.eval.split <- split(snp.eval$snp,
                         snp.eval$mineval.feature)
 
+snp.eval.split.len <- sapply(snp.eval.split, length)
+
+# Save names of DeepSEA features
+features.uniq <- unique(snp.eval$mineval.feature)
+
 # Visualize number of SNPs we have for each deepse feature
-qplot(sapply(snp.eval.split, length), bins=100,
+qplot(snp.eval.split.len, bins=100,
       color=I('white'),
       xlab='Model feature sizes') +
   theme_minimal()
 
 ```
 
-```{r, eval=F}
+Then we read the genotype and phenotype files. Here we have them in PLINK format but there are many other formats available. In addition, dosage files can also be used.
 
-# Save names of DeepSEA features
-features.uniq <- unique(snp.eval$mineval.feature)
 
+```{r}
 
 # Read plink or dosage ----------------------------------------------------
 
@@ -90,11 +123,12 @@ ind.ids <- ind.ids[cc.index]
 names(response) <- rownames(pl$genotypes)
 ```
 
-# Multi-locus regression
+### Multi-locus regression
 
-```{r, eval=F}
+Next step is to fit regularized logistic regression models on grouped set of variants to investigate the association between set of variants and the disease in a specific context of cell line, transcription factor (or chromatin feature) and treatment.
+
+```{r}
 # Regression --------------------------------------------------------------
-
 
 if (file.exists('data/models.Rds')) {
   cv.fits <- readRDS('data/models.Rds')
@@ -118,8 +152,52 @@ if (file.exists('data/models.Rds')) {
 }
 ```
 
+This is done via `glmnet` package. A LASSO model is fitted to each of 919 groups of variants with the same response variable which is the binary disease status. `lambda` parameter of LASSO is determined via 100-fold cross-validation.
 
-# Model selection
+Let's now plot the distribution of the number non-zero coefficients in each model:
+
+```{r, warning=F, message=F}
+
+get.nonzero.coef <- function(fit, exclude=c('(Intercept)', 'age', 'sex')) {
+  co <- coef(fit, s = fit$lambda.1se)
+  l <- rownames(co)[which(co != 0)]
+  setdiff(l, exclude)
+}
+
+fits.coeff <- lapply(cv.fits, get.nonzero.coef)
+fits.coeff.len <- sapply(fits.coeff, length)
+#qplot(fits.coeff.len, color=I('white'), 
+#      xlab='Number of non-zero coefficients', binwidth=1) + theme_minimal()
+plot(table(fits.coeff.len), xlab='Number of non-zero coefficients', ylab='count')
+```
+
+### Visualization of variable selection
+
+```{r}
+snp.eval.split.len <- snp.eval.split.len[match(names(fits.coeff.len), 
+                                               names(snp.eval.split.len)) ]
+
+num.variant.x.cutoff <- quantile(ecdf(snp.eval.split.len), .996)
+num.variant.y.cutoff <- quantile(ecdf(fits.coeff.len), .995)
+
+num.variant.df <- data.frame(snp.eval.split.len=snp.eval.split.len,
+                             fits.coeff.len=fits.coeff.len,
+                             model=names(fits.coeff.len), stringsAsFactors = F)
+
+ggplot(num.variant.df, aes(snp.eval.split.len, fits.coeff.len)) + 
+  geom_point() +
+  geom_label_repel(data=subset(num.variant.df, snp.eval.split.len > num.variant.x.cutoff |
+                                 fits.coeff.len > num.variant.y.cutoff),
+                   aes(label=model)) +
+  labs(x='Number of variants in models',
+       y='Number of non-zero coefficients in fitted models') +
+  theme_minimal()
+
+```
+
+### Model selection
+
+Here we compare our LASSO models with other LASSO models that are fitted to the same covariates but with a shuffled response column. That shows us how significantly our model outperforms models fitted on random data.
 
 ```{r, eval=F}
 # Model selection ---------------------------------------------------------
@@ -162,24 +240,103 @@ if (file.exists('data/permutation_models.Rds')) {
              family='binomial')
     })
 
-    list(fit=fit, devi=devi)
+    list(mainfit=fit, permfits=devi)
   }, mc.cores = 12)
 
   names(U) <- features.uniq
   saveRDS(U, 'data/permutation_models.Rds')
 }
+```
 
+For all 1000 permutations and 919 models, `U` matrix ($1000\times919$) stores the deviance values for each fitted random model. Because this also takes significant amount of time, we use a pre-computed matrix.
 
-main.model.dev.ratio <- sapply(U, function(model)model$fit$dev.ratio)
+#### Sort models and calculate empirical p-values
+
+```{r, eval=F}
+main.model.dev.ratio <- sapply(U, function(feature)feature$mainfit$dev.ratio)
+qplot(main.model.dev.ratio) + coord_flip()
+
 model.order <- order(main.model.dev.ratio, decreasing = T)
 main.model.dev.ratio.sorted <- main.model.dev.ratio[model.order]
 
-
-D <- sapply(U, function(model)sapply(model[-1], function(model)model$dev.ratio))
+D <- sapply(U, function(feature)sapply(feature$permfits, function(permfit)permfit$dev.ratio))
 D <- t(D)
 D <- D[model.order,] #sort models based on the dev.ratio of the main model
 #pheatmap(D, cluster_rows = F)
 
-
+p.values <- sapply(seq_len(nrow(D)), function(row)mean(D[row,] >= main.model.dev.ratio.sorted[row]))
+names(p.values) <- names(main.model.dev.ratio.sorted)
+p.values.adj <- p.adjust(p.values, 'fdr')
+p.values.adj[p.values.adj<0.1]
+p.values.adj
 ```
 
+
+#### Summarize everything as a tsv file
+
+```{r, eval=F}
+# let's also add rest of 919 models ---------------------------------------
+failed.lasso.names <- setdiff(features.uniq, names(p.values.adj))
+failed.lasso.pvals <- rep(NA_real_, length(failed.lasso.names))
+names(failed.lasso.pvals) <- failed.lasso.names
+
+#combine failed lasso models and observed pvalues
+sigmodel.pvalues <- c(p.values.adj, failed.lasso.pvals)
+sigmodel.pvalues.orig <- c(p.values, failed.lasso.pvals)
+sigmodel.names <- features[match(names(sigmodel.pvalues), features.uniq)]
+sigmodel.names.uniq <- features.uniq[match(names(sigmodel.pvalues), features.uniq)]
+sigmodel.df <- as.data.frame(do.call(rbind, strsplit(sigmodel.names, '|', fixed = T)), stringsAsFactors = F)
+colnames(sigmodel.df) <- c('Cell.line', 'Chromatin.feature', 'Treatment')
+sigmodel.df$pval.adj <- sigmodel.pvalues
+sigmodel.df$pval <- sigmodel.pvalues.orig
+sigmodel.df$codename <- sigmodel.names.uniq
+sigmodel.df$deepsea.name <- sigmodel.names
+
+tidy.treatments <- gsub('None', '', gsub('\\.[1-9]$', '', sigmodel.df$Treatment))
+sigmodel.df$Treatment <- tidy.treatments
+
+sigmodel.df$devratio <- main.model.dev.ratio[match(sigmodel.df$codename, names(main.model.dev.ratio))]
+sigmodel.df <- sigmodel.df[order(sigmodel.df$pval.adj),]
+rownames(sigmodel.df) <- NULL
+write.table(sigmodel.df, 'data/permutation_pvalues.tsv', sep='\t', quote = F, row.names = F)
+```
+
+
+```{r, eval=F}
+# now, plot the pvalue heatmap --------------------------------------------
+tidy.treatments[tidy.treatments!=''] <- paste0('(', tidy.treatments[tidy.treatments!=''], ')')
+sigmodel.df$Treatment <- tidy.treatments
+sigmodel.df <- dplyr::select(sigmodel.df, Cell.line, Chromatin.feature, Treatment, pval.adj)
+sigmodel.df = group_by(sigmodel.df, Cell.line, Chromatin.feature, Treatment) %>%
+  mutate(pval.adj=min(pval.adj, na.rm=T)) %>% distinct %>% as.data.frame(., stringsAsFactors=F)
+sigmodel.df$pval.adj[is.na(sigmodel.df$pval.adj)] <- -2
+
+
+#fill `not measured` with NA so that we can color it differently
+sigmodel.mat <- tidyr::spread(sigmodel.df, "Chromatin.feature", pval.adj)
+rownames(sigmodel.mat) <- paste0(sigmodel.mat$Cell.line, sigmodel.mat$Treatment)
+sigmodel.mat$Cell.line <- NULL
+sigmodel.mat$Treatment <- NULL
+
+f <- function(x){(!is.na(x)) & (x != -2) & (x < 0.1)}
+sigmodel.mat <- sigmodel.mat[rowSums((!f(sigmodel.mat)), na.rm = T) != ncol(sigmodel.mat),]
+sigmodel.mat <- sigmodel.mat[,colSums((!f(sigmodel.mat)), na.rm = T) != nrow(sigmodel.mat)]
+
+#sort the rows based on the total number of significant models
+ord <- order(rowSums(f(sigmodel.mat), na.rm = T), decreasing = T)
+
+#the models that have no non-zero lasso coef. and the ones that failed the significance test are all
+#represented by the same color
+#set the pvalue of the lasso-dropped models (previously set to 1) somewhere between 0.1 and max so that it'll be painted in white
+sigmodel.mat[sigmodel.mat == -2] <- mean(c(0.1, max(sigmodel.mat, na.rm = T)))
+
+heatmap.2(((as.matrix(sigmodel.mat[ord,]))),
+          Rowv = F, Colv = F, trace = 'none', dendrogram = 'none', na.color = 'black',
+          col=c(colorRampPalette(rev(brewer.pal(9, 'YlOrRd')[-1]),
+                                 interpolate='spline')(20), 'white'),
+          breaks=c(seq(0, 0.1, length.out = 21), max(sigmodel.mat, na.rm = T)),
+          cexRow = 0.8,
+          cexCol = 0.8,
+          margins = c(7,13)
+)
+```
