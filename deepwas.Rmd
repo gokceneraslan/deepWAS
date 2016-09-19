@@ -73,7 +73,7 @@ This is how the predictions look like. Below we see the e-value distribution of 
 
 ```{r}
 snps <- unique(snp.eval$snp)
-qplot((snp.eval$mineval),
+qplot(snp.eval$mineval,
       color=I('white'),
       bins=60, log='x',
       xlab='e-values (log10)') +
@@ -306,7 +306,7 @@ sigmodel.df$Treatment <- gsub('None', '', gsub('\\.[1-9]$', '', sigmodel.df$Trea
 sigmodel.df$devratio <- main.model.dev.ratio[match(sigmodel.df$codename, names(main.model.dev.ratio))]
 sigmodel.df <- sigmodel.df[order(sigmodel.df$pval.adj),]
 rownames(sigmodel.df) <- NULL
-head(select(sigmodel.df, -codename), 12)
+head(select(sigmodel.df, -codename, -deepsea.name), 12)
 write.table(sigmodel.df, 'data/permutation_pvalues.tsv', sep='\t', quote = F, row.names = F)
 ```
 
@@ -352,8 +352,8 @@ heatmap.2(as.matrix(sigmodel.mat[ord,]),
           cexRow = 1,
           cexCol = 1,
           keysize = 1,
-          key.title = 'Adjusted p-value (-log10)',
-          key.xlab = 'Adjusted p-value (-log10)',
+          key.title = 'FDR-adjusted p-value',
+          key.xlab = 'FDR-adjusted p-value',
           density.info='none',
           sepwidth=c(0.005,0.005),
           sepcolor="black",
