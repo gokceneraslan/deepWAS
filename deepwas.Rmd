@@ -275,8 +275,7 @@ qplot(main.model.dev.ratio, bins=60, color=I('white')) + theme_minimal()
 p.values <- sapply(rownames(D), function(m)mean(D[m,] >= main.model.dev.ratio[m]))
 names(p.values) <- names(main.model.dev.ratio)
 p.values.adj <- p.adjust(p.values, 'fdr')
-p.values.adj[p.values.adj<0.1]
-p.values.adj
+head(p.values.adj)
 ```
 
 
@@ -303,22 +302,19 @@ sigmodel.df$deepsea.name <- sigmodel.names
 
 
 ```{r}
-tidy.treatments <- gsub('None', '', gsub('\\.[1-9]$', '', sigmodel.df$Treatment))
-sigmodel.df$Treatment <- tidy.treatments
-
+sigmodel.df$Treatment <- gsub('None', '', gsub('\\.[1-9]$', '', sigmodel.df$Treatment))
 sigmodel.df$devratio <- main.model.dev.ratio[match(sigmodel.df$codename, names(main.model.dev.ratio))]
 sigmodel.df <- sigmodel.df[order(sigmodel.df$pval.adj),]
 rownames(sigmodel.df) <- NULL
-head(sigmodel.df)
+head(select(sigmodel.df, -codename), 12)
 write.table(sigmodel.df, 'data/permutation_pvalues.tsv', sep='\t', quote = F, row.names = F)
 ```
 
-#### Visualize variable and model selection with a heatmap
+#### Visualize variable and model selection
 
-```{r}
+```{r, fig.height=12, fig.width=15}
 # now, plot the pvalue heatmap --------------------------------------------
-tidy.treatments[tidy.treatments!=''] <- paste0('(', tidy.treatments[tidy.treatments!=''], ')')
-sigmodel.df$Treatment <- tidy.treatments
+sigmodel.df$Treatment[sigmodel.df$Treatment !=''] <- paste0('(', sigmodel.df$Treatment[sigmodel.df$Treatment!=''], ')')
 sigmodel.df <- dplyr::select(sigmodel.df, Cell.line, Chromatin.feature, Treatment, pval.adj)
 
 #pick smallest p-value if multiple models with the same name exist
@@ -345,16 +341,24 @@ ord <- order(rowSums(f(sigmodel.mat), na.rm = T), decreasing = T)
 
 #the models that have no non-zero lasso coef. and the ones that failed the significance test are all
 #represented by the same color
-#set the pvalue of the lasso-dropped models (previously set to 1) somewhere between 0.1 and max so that it'll be painted in white
+#set the pvalue of the lasso-dropped models (previously set to 1) somewhere between 0.1 and max so that it'll be painted in gray
 sigmodel.mat[sigmodel.mat == -2] <- mean(c(0.1, max(sigmodel.mat, na.rm = T)))
 
-heatmap.2(((as.matrix(sigmodel.mat[ord,]))),
-          Rowv = F, Colv = F, trace = 'none', dendrogram = 'none', na.color = 'black',
+heatmap.2(as.matrix(sigmodel.mat[ord,]),
+          Rowv = F, Colv = F, trace = 'none', dendrogram = 'none', na.color = 'white',
           col=c(colorRampPalette(rev(brewer.pal(9, 'YlOrRd')[-1]),
-                                 interpolate='spline')(20), 'white'),
+                                 interpolate='spline')(20), 'gray'),
           breaks=c(seq(0, 0.1, length.out = 21), max(sigmodel.mat, na.rm = T)),
-          cexRow = 0.8,
-          cexCol = 0.8,
+          cexRow = 1,
+          cexCol = 1,
+          keysize = 1,
+          key.title = 'Adjusted p-value (-log10)',
+          key.xlab = 'Adjusted p-value (-log10)',
+          density.info='none',
+          sepwidth=c(0.005,0.005),
+          sepcolor="black",
+          colsep=c(seq(0,ncol(sigmodel.mat), 5), ncol(sigmodel.mat)),
+          rowsep=c(seq(0, nrow(sigmodel.mat), 5), nrow(sigmodel.mat)),
           margins = c(7,13)
 )
 ```
