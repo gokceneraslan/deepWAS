@@ -43,6 +43,7 @@ library(printr) # install from https://github.com/yihui/printr
 library(glmnet)
 library(parallel)
 library(tidyr)
+library(dplyr)
 ```
 ## Analysis
 
@@ -66,7 +67,7 @@ if (file.exists('data/evalues.tsv')) {
 
 head(snp.eval)
 ```
-
+  
 This is how the predictions look like. Below we see the e-value distribution of our variants. Note that only the variants with evalue < 5e-5 are shown and are considered in the rest of the analysis. The lowest e-value is 1e-6 since there are 1M snps in the background distribution of DeepSEA.
 
 
@@ -85,12 +86,15 @@ Next step is to group variants per {cell line, chromatin feature, treatment} tri
 ```{r}
 
 snp.eval.split <- split(snp.eval$snp,
-                        snp.eval$mineval.feature)
+                        snp.eval$mineval.feature.uniq)
 
 snp.eval.split.len <- sapply(snp.eval.split, length)
 
 # Save names of DeepSEA features
-features.uniq <- unique(snp.eval$mineval.feature)
+features.uniq <- unique(snp.eval$mineval.feature.uniq)
+feature.mapping <- unique(snp.eval[,c('mineval.feature.uniq', 'mineval.feature')])
+features <- feature.mapping[match(features.uniq, feature.mapping$mineval.feature.uniq),
+                            'mineval.feature']
 
 # Visualize number of SNPs we have for each deepse feature
 qplot(snp.eval.split.len, bins=100,
@@ -166,7 +170,7 @@ get.nonzero.coef <- function(fit, exclude=c('(Intercept)', 'age', 'sex')) {
 
 fits.coeff <- lapply(cv.fits, get.nonzero.coef)
 fits.coeff.len <- sapply(fits.coeff, length)
-#qplot(fits.coeff.len, color=I('white'), 
+#qplot(fits.coeff.len, color=I('white'),
 #      xlab='Number of non-zero coefficients', binwidth=1) + theme_minimal()
 plot(table(fits.coeff.len), xlab='Number of non-zero coefficients', ylab='count')
 ```
@@ -174,7 +178,7 @@ plot(table(fits.coeff.len), xlab='Number of non-zero coefficients', ylab='count'
 ### Visualization of variable selection
 
 ```{r}
-snp.eval.split.len <- snp.eval.split.len[match(names(fits.coeff.len), 
+snp.eval.split.len <- snp.eval.split.len[match(names(fits.coeff.len),
                                                names(snp.eval.split.len)) ]
 
 num.variant.x.cutoff <- quantile(ecdf(snp.eval.split.len), .996)
@@ -184,7 +188,7 @@ num.variant.df <- data.frame(snp.eval.split.len=snp.eval.split.len,
                              fits.coeff.len=fits.coeff.len,
                              model=names(fits.coeff.len), stringsAsFactors = F)
 
-ggplot(num.variant.df, aes(snp.eval.split.len, fits.coeff.len)) + 
+ggplot(num.variant.df, aes(snp.eval.split.len, fits.coeff.len)) +
   geom_point() +
   geom_label_repel(data=subset(num.variant.df, snp.eval.split.len > num.variant.x.cutoff |
                                  fits.coeff.len > num.variant.y.cutoff),
@@ -199,19 +203,20 @@ ggplot(num.variant.df, aes(snp.eval.split.len, fits.coeff.len)) +
 
 Here we compare our LASSO models with other LASSO models that are fitted to the same covariates but with a shuffled response column. That shows us how significantly our model outperforms models fitted on random data.
 
-```{r, eval=F}
+```{r}
 # Model selection ---------------------------------------------------------
 
-# Let's fit models on shuffled response
-nperm <- 1000
-perm.index <- sapply(seq_len(nperm), function(x)sample(ind.ids))
-stopifnot(ncol(perm.index) == nperm)
-
 if (file.exists('data/permutation_models.Rds')) {
-
-  U <- readRDS('data/permutation_models.Rds')
-
+  #U <- readRDS('data/permutation_models.Rds')
+  D <- readRDS('data/permutation_models_devratios.Rds')
+  main.model.dev.ratio <- readRDS('data/models_devratios.Rds')
 } else {
+
+  # Let's fit models on shuffled response
+  nperm <- 1000
+  perm.index <- sapply(seq_len(nperm), function(x)sample(ind.ids))
+  stopifnot(ncol(perm.index) == nperm)
+
   U <- mclapply(features.uniq, function(feature) {
 
     print(feature)
@@ -240,11 +245,17 @@ if (file.exists('data/permutation_models.Rds')) {
              family='binomial')
     })
 
-    list(mainfit=fit, permfits=devi)
+    list(fit=fit, devi=devi)
   }, mc.cores = 12)
 
   names(U) <- features.uniq
+  main.model.dev.ratio <- sapply(U, function(feature)feature$fit$dev.ratio)
+  D <- sapply(U, function(feature)sapply(feature$devi, function(permfit)permfit$dev.ratio))
+  D <- t(D)
+  
   saveRDS(U, 'data/permutation_models.Rds')
+  saveRDS(D, 'data/permutation_models_devratios.Rds')
+  saveRDS(main.model.dev.ratio, 'data/models_devratios.Rds')
 }
 ```
 
@@ -252,20 +263,17 @@ For all 1000 permutations and 919 models, `U` matrix ($1000\times919$) stores th
 
 #### Sort models and calculate empirical p-values
 
-```{r, eval=F}
-main.model.dev.ratio <- sapply(U, function(feature)feature$mainfit$dev.ratio)
-qplot(main.model.dev.ratio) + coord_flip()
+```{r}
+#perform model selection only on models with non-zero coef.
+nonzero.models <- names(fits.coeff.len)[fits.coeff.len > 0]
+main.model.dev.ratio <- sort(main.model.dev.ratio[nonzero.models], decreasing = T)
+D <- D[names(main.model.dev.ratio),]
 
-model.order <- order(main.model.dev.ratio, decreasing = T)
-main.model.dev.ratio.sorted <- main.model.dev.ratio[model.order]
+qplot(main.model.dev.ratio, bins=60, color=I('white')) + theme_minimal()
+#pheatmap(D)
 
-D <- sapply(U, function(feature)sapply(feature$permfits, function(permfit)permfit$dev.ratio))
-D <- t(D)
-D <- D[model.order,] #sort models based on the dev.ratio of the main model
-#pheatmap(D, cluster_rows = F)
-
-p.values <- sapply(seq_len(nrow(D)), function(row)mean(D[row,] >= main.model.dev.ratio.sorted[row]))
-names(p.values) <- names(main.model.dev.ratio.sorted)
+p.values <- sapply(rownames(D), function(m)mean(D[m,] >= main.model.dev.ratio[m]))
+names(p.values) <- names(main.model.dev.ratio)
 p.values.adj <- p.adjust(p.values, 'fdr')
 p.values.adj[p.values.adj<0.1]
 p.values.adj
@@ -274,8 +282,8 @@ p.values.adj
 
 #### Summarize everything as a tsv file
 
-```{r, eval=F}
-# let's also add rest of 919 models ---------------------------------------
+```{r}
+# create a dataframe with all models, pvalues and deviance values
 failed.lasso.names <- setdiff(features.uniq, names(p.values.adj))
 failed.lasso.pvals <- rep(NA_real_, length(failed.lasso.names))
 names(failed.lasso.pvals) <- failed.lasso.names
@@ -291,29 +299,39 @@ sigmodel.df$pval.adj <- sigmodel.pvalues
 sigmodel.df$pval <- sigmodel.pvalues.orig
 sigmodel.df$codename <- sigmodel.names.uniq
 sigmodel.df$deepsea.name <- sigmodel.names
+```
 
+
+```{r}
 tidy.treatments <- gsub('None', '', gsub('\\.[1-9]$', '', sigmodel.df$Treatment))
 sigmodel.df$Treatment <- tidy.treatments
 
 sigmodel.df$devratio <- main.model.dev.ratio[match(sigmodel.df$codename, names(main.model.dev.ratio))]
 sigmodel.df <- sigmodel.df[order(sigmodel.df$pval.adj),]
 rownames(sigmodel.df) <- NULL
+head(sigmodel.df)
 write.table(sigmodel.df, 'data/permutation_pvalues.tsv', sep='\t', quote = F, row.names = F)
 ```
 
+#### Visualize variable and model selection with a heatmap
 
-```{r, eval=F}
+```{r}
 # now, plot the pvalue heatmap --------------------------------------------
 tidy.treatments[tidy.treatments!=''] <- paste0('(', tidy.treatments[tidy.treatments!=''], ')')
 sigmodel.df$Treatment <- tidy.treatments
 sigmodel.df <- dplyr::select(sigmodel.df, Cell.line, Chromatin.feature, Treatment, pval.adj)
-sigmodel.df = group_by(sigmodel.df, Cell.line, Chromatin.feature, Treatment) %>%
-  mutate(pval.adj=min(pval.adj, na.rm=T)) %>% distinct %>% as.data.frame(., stringsAsFactors=F)
+
+#pick smallest p-value if multiple models with the same name exist
+sigmodel.df <- group_by(sigmodel.df, Cell.line, Chromatin.feature, Treatment) %>%
+  mutate(pval.adj=min(pval.adj, na.rm=T)) %>% 
+  distinct %>%
+  as.data.frame(., stringsAsFactors=F)
+
 sigmodel.df$pval.adj[is.na(sigmodel.df$pval.adj)] <- -2
 
 
 #fill `not measured` with NA so that we can color it differently
-sigmodel.mat <- tidyr::spread(sigmodel.df, "Chromatin.feature", pval.adj)
+sigmodel.mat <- spread(sigmodel.df, "Chromatin.feature", pval.adj)
 rownames(sigmodel.mat) <- paste0(sigmodel.mat$Cell.line, sigmodel.mat$Treatment)
 sigmodel.mat$Cell.line <- NULL
 sigmodel.mat$Treatment <- NULL
