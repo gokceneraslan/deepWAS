@@ -67,7 +67,7 @@ if (file.exists('data/evalues.tsv')) {
 
 head(snp.eval)
 ```
-  
+
 This is how the predictions look like. Below we see the e-value distribution of our variants. Note that only the variants with evalue < 5e-5 are shown and are considered in the rest of the analysis. The lowest e-value is 1e-6 since there are 1M snps in the background distribution of DeepSEA.
 
 
@@ -206,13 +206,16 @@ Here we compare our LASSO models with other LASSO models that are fitted to the 
 ```{r}
 # Model selection ---------------------------------------------------------
 
-if (file.exists('data/permutation_models.Rds')) {
+if (file.exists('data/permutation_models.Rds') &&
+    file.exists('data/permutation_models_devratios.Rds') &&
+    file.exists('data/models_devratios.Rds')) {
+
   #U <- readRDS('data/permutation_models.Rds')
   D <- readRDS('data/permutation_models_devratios.Rds')
   main.model.dev.ratio <- readRDS('data/models_devratios.Rds')
 } else {
 
-  # Let's fit models on shuffled response
+  # Let's fit models on shuffled genotypes
   nperm <- 1000
   perm.index <- sapply(seq_len(nperm), function(x)sample(ind.ids))
   stopifnot(ncol(perm.index) == nperm)
@@ -232,14 +235,18 @@ if (file.exists('data/permutation_models.Rds')) {
 
     devi <- lapply(seq_len(nperm), function(ix){
 
+      # new design matrix with shuffled genotypes
+      mat <- cbind(as(pl$genotypes[perm.index[,ix], snp.eval.split[[feature]]], 'numeric'),
+                 covar)
+
       # Use shuffled response here
       f <- cv.glmnet(mat,
-                     response[perm.index[,ix]],
+                     response,
                      alpha=1,
                      #nfolds = 100, # too slow
                      family='binomial')
       glmnet(mat,
-             response[perm.index[,ix]],
+             response,
              alpha=1,
              lambda = f$lambda.1se,
              family='binomial')
@@ -252,7 +259,7 @@ if (file.exists('data/permutation_models.Rds')) {
   main.model.dev.ratio <- sapply(U, function(feature)feature$fit$dev.ratio)
   D <- sapply(U, function(feature)sapply(feature$devi, function(permfit)permfit$dev.ratio))
   D <- t(D)
-  
+
   saveRDS(U, 'data/permutation_models.Rds')
   saveRDS(D, 'data/permutation_models_devratios.Rds')
   saveRDS(main.model.dev.ratio, 'data/models_devratios.Rds')
@@ -319,7 +326,7 @@ sigmodel.df <- dplyr::select(sigmodel.df, Cell.line, Chromatin.feature, Treatmen
 
 #pick smallest p-value if multiple models with the same name exist
 sigmodel.df <- group_by(sigmodel.df, Cell.line, Chromatin.feature, Treatment) %>%
-  mutate(pval.adj=min(pval.adj, na.rm=T)) %>% 
+  mutate(pval.adj=min(pval.adj, na.rm=T)) %>%
   distinct %>%
   as.data.frame(., stringsAsFactors=F)
 
