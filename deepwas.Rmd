@@ -28,7 +28,7 @@ DeepWAS [project](http://biorxiv.org/content/early/2016/08/11/069096) showed tha
 
 `glmnet`, `ggplot2`, `ggrepel`, `gplots` and `RColorBrewer` packages are used for the visualization, whereas `snpStats` was used to read PLINK-formatted genotype and phenotype files. If you want to run DeepSEA from scratch, please check out additional R helper files on the [Github repository](https://github.com/gokceneraslan/deepwas) to run DeepSEA from within the R code conveniently.
 
-```{r, warning=F, message=F}
+```{r loadpackages, warning=F, message=F}
 #Bioconductor
 library(snpStats)
 
@@ -53,7 +53,7 @@ set.seed(42)
 
 Deep-learning methods have been proposed to make highly accurate predictions of various chromatin features and transcription factor binding sites using the DNA sequences of a given genomic range. Here we use DeepSEA to assess the regulatory impact of each variant we genotyped (and imputed) from the case/control cohort. Since deep learning part takes time (~12 hours per 1M variants with a Titan X and a magnetic disk where I/O takes %90 of time), here we'll be using an existing file with variant e-values.
 
-```{r}
+```{r rundeepsea}
 # Run DeepSEA -------------------------------------------------------------
 
 # Run deepsea or use existing file
@@ -73,7 +73,7 @@ head(snp.eval)
 This is how the predictions look like. Below we see the e-value distribution of our variants. Note that only the variants with evalue < 5e-5 are shown and are considered in the rest of the analysis. The lowest e-value is 1e-6 since there are 1M snps in the background distribution of DeepSEA.
 
 
-```{r}
+```{r visualizedeepsea}
 snps <- unique(snp.eval$snp)
 qplot(snp.eval$mineval,
       color=I('white'),
@@ -85,7 +85,7 @@ qplot(snp.eval$mineval,
 
 Next step is to group variants per {cell line, chromatin feature, treatment} triplet (e.g. `X8988T.DNase.None`), which is called a functional unit in the paper. We can plot the distribution of number of variants we have in each of 919 groups.
 
-```{r}
+```{r visualizedeepsea2}
 
 snp.eval.split <- split(snp.eval$snp,
                         snp.eval$mineval.feature.uniq)
@@ -109,7 +109,7 @@ qplot(snp.eval.split.len, bins=100,
 Then we read the genotype and phenotype files. Here we have them in PLINK format but there are many other formats available. In addition, dosage files can also be used.
 
 
-```{r}
+```{r readgenotypes}
 
 # Read plink or dosage ----------------------------------------------------
 
@@ -133,7 +133,7 @@ names(response) <- rownames(pl$genotypes)
 
 Next step is to fit regularized logistic regression models on grouped set of variants to investigate the association between set of variants and the disease in a specific context of cell line, transcription factor (or chromatin feature) and treatment.
 
-```{r}
+```{r performregression}
 # Regression --------------------------------------------------------------
 
 if (file.exists('data/models.Rds')) {
@@ -161,7 +161,7 @@ This is done via `glmnet` package. A LASSO model is fitted to each of 919 groups
 
 Let's now plot the distribution of the number non-zero coefficients in each model:
 
-```{r, warning=F, message=F}
+```{r visualizevariableselection, warning=F, message=F}
 
 get.nonzero.coef <- function(fit, exclude=c('(Intercept)', 'age', 'sex')) {
   co <- coef(fit, s = fit$lambda.1se)
@@ -178,7 +178,7 @@ plot(table(fits.coeff.len), xlab='Number of non-zero coefficients', ylab='count'
 
 ### Visualization of variable selection
 
-```{r}
+```{r visualizevariableselection2}
 snp.eval.split.len <- snp.eval.split.len[match(names(fits.coeff.len),
                                                names(snp.eval.split.len)) ]
 
@@ -204,7 +204,7 @@ ggplot(num.variant.df, aes(snp.eval.split.len, fits.coeff.len)) +
 
 Here we compare our LASSO models with other LASSO models that are fitted to the same covariates but with a shuffled response column. That shows us how significantly our model outperforms models fitted on random data.
 
-```{r}
+```{r performmodelselection}
 # Model selection ---------------------------------------------------------
 
 if (file.exists('data/permutation_models.Rds') &&
@@ -271,7 +271,7 @@ For all 1000 permutations and 919 models, `U` matrix ($1000\times919$) stores th
 
 #### Sort models and calculate empirical p-values
 
-```{r}
+```{r calculateempiricalpvals}
 #perform model selection only on models with non-zero coef.
 nonzero.models <- names(fits.coeff.len)[fits.coeff.len > 0]
 main.model.dev.ratio <- sort(main.model.dev.ratio[nonzero.models], decreasing = T)
@@ -289,7 +289,7 @@ head(p.values.adj)
 
 #### Summarize everything as a tsv file
 
-```{r}
+```{r generatesummaryfile}
 # create a dataframe with all models, pvalues and deviance values
 failed.lasso.names <- setdiff(features.uniq, names(p.values.adj))
 failed.lasso.pvals <- rep(NA_real_, length(failed.lasso.names))
@@ -320,7 +320,7 @@ write.table(sigmodel.df, 'data/permutation_pvalues.tsv', sep='\t', quote = F, ro
 
 #### Visualize variable and model selection
 
-```{r, fig.height=12, fig.width=15}
+```{r visualizevariableandmodelselection, fig.height=12, fig.width=15}
 # now, plot the pvalue heatmap --------------------------------------------
 sigmodel.df$Treatment[sigmodel.df$Treatment !=''] <- paste0('(', sigmodel.df$Treatment[sigmodel.df$Treatment!=''], ')')
 sigmodel.df <- dplyr::select(sigmodel.df, Cell.line, Chromatin.feature, Treatment, pval.adj)
