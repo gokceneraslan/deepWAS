@@ -44,6 +44,8 @@ library(glmnet)
 library(parallel)
 library(tidyr)
 library(dplyr)
+
+set.seed(42)
 ```
 ## Analysis
 
@@ -137,7 +139,6 @@ Next step is to fit regularized logistic regression models on grouped set of var
 if (file.exists('data/models.Rds')) {
   cv.fits <- readRDS('data/models.Rds')
 } else {
-  set.seed(42)
   cv.fits <- mclapply(features.uniq, function(feature) {
     print(feature)
     mat <- cbind(as(pl$genotypes[, snp.eval.split[[feature]]], 'numeric'),
