@@ -326,9 +326,9 @@ sigmodel.df$Treatment[sigmodel.df$Treatment !=''] <- paste0('(', sigmodel.df$Tre
 sigmodel.df <- dplyr::select(sigmodel.df, Cell.line, Chromatin.feature, Treatment, pval.adj)
 
 #pick smallest p-value if multiple models with the same name exist
-sigmodel.df <- group_by(sigmodel.df, Cell.line, Chromatin.feature, Treatment) %>%
-  mutate(pval.adj=min(pval.adj, na.rm=T)) %>%
-  distinct %>%
+sigmodel.df <- dplyr::group_by(sigmodel.df, Cell.line, Chromatin.feature, Treatment) %>%
+  dplyr::mutate(pval.adj=min(pval.adj, na.rm=T)) %>%
+  dplyr::distinct(.keep_all = T) %>%
   as.data.frame(., stringsAsFactors=F)
 
 sigmodel.df$pval.adj[is.na(sigmodel.df$pval.adj)] <- -2
@@ -349,8 +349,8 @@ ord <- order(rowSums(f(sigmodel.mat), na.rm = T), decreasing = T)
 
 #the models that have no non-zero lasso coef. and the ones that failed the significance test are all
 #represented by the same color
-#set the pvalue of the lasso-dropped models (previously set to 1) somewhere between 0.1 and max so that it'll be painted in gray
-sigmodel.mat[sigmodel.mat == -2] <- mean(c(0.1, max(sigmodel.mat, na.rm = T)))
+#set the pvalue of the lasso-dropped models (previously set to 1) somewhere barely above 0.1 so that it'll be painted in gray
+sigmodel.mat[sigmodel.mat == -2] <- 0.1001
 
 heatmap.2(as.matrix(sigmodel.mat[ord,]),
           Rowv = F, Colv = F, trace = 'none', dendrogram = 'none', na.color = 'white',
