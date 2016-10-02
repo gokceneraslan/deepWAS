@@ -37,6 +37,7 @@ library(ggplot2)
 library(ggrepel)
 library(RColorBrewer)
 library(gplots)
+library(pheatmap)
 library(printr) # install from https://github.com/yihui/printr
 
 #Regression, parallelization and data tidying
@@ -395,5 +396,17 @@ deepwas.hits.df <- deepwas.hits.df[with(deepwas.hits.df, order(Cell.line, Chroma
 
 head(deepwas.hits.df)
 write.table(deepwas.hits.df, 'data/deepwas_hits.tsv', sep='\t', quote = F, row.names = F)
+```
+
+### Visualize GM12878 Hits
+
+```{r gm12878, fig.height=7, fig.width=5}
+
+gmhits <- subset(deepwas.hits.df, Cell.line == 'GM12878', select=c('Chromatin.feature', 'SNP'))
+gmhits$exists <- 1 
+gmhits.heatmap <- spread(gmhits, Chromatin.feature, exists, fill = 0)
+rownames(gmhits.heatmap) <- gmhits.heatmap$SNP
+gmhits.heatmap$SNP <- NULL
+pheatmap(gmhits.heatmap, color = c("#e5f5e0", "#31a354"), border_color = 'lightgray')
 ```
 
