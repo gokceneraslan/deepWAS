@@ -128,6 +128,11 @@ covar <- covar[cc.index,]
 response <- response[cc.index]
 ind.ids <- ind.ids[cc.index]
 names(response) <- rownames(pl$genotypes)
+
+covar.plot.df <- as.data.frame(cbind.data.frame(response, covar))
+covar.plot.df$response <- factor(covar.plot.df$response, labels=c('control','case'))
+covar.plot.df$sex <- factor(covar.plot.df$sex, labels=c('male','female'))
+ggplot(covar.plot.df, aes(x=age)) + geom_bar(color='white') + facet_grid(response~sex) + theme_minimal()
 ```
 
 ### Multi-locus regression
