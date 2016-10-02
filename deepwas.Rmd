@@ -390,6 +390,8 @@ deepwas.hits.df <- cbind(deepwas.hits.df, as.data.frame(do.call(rbind, strsplit(
                                                         stringsAsFactors = F))
 deepwas.hits.df <- deepwas.hits.df[, c('V1', 'V2', 'V3', 'snp')]
 colnames(deepwas.hits.df) <- c('Cell.line', 'Chromatin.feature', 'Treatment', 'SNP')
+rownames(deepwas.hits.df) <- NULL
+deepwas.hits.df <- deepwas.hits.df[with(deepwas.hits.df, order(Cell.line, Chromatin.feature, Treatment)),]
 
 head(deepwas.hits.df)
 write.table(deepwas.hits.df, 'data/deepwas_hits.tsv', sep='\t', quote = F, row.names = F)
