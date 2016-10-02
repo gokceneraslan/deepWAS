@@ -43,7 +43,7 @@ library(printr) # install from https://github.com/yihui/printr
 library(glmnet)
 library(parallel)
 library(tidyr)
-library(dplyr)
+library(dplyr) #at least 0.5.0
 
 set.seed(42)
 ```
@@ -322,41 +322,41 @@ write.table(sigmodel.df, 'data/permutation_pvalues.tsv', sep='\t', quote = F, ro
 
 ```{r visualizevariableandmodelselection, fig.height=12, fig.width=15}
 # now, plot the pvalue heatmap --------------------------------------------
-sigmodel.df$Treatment[sigmodel.df$Treatment !=''] <- paste0('(', sigmodel.df$Treatment[sigmodel.df$Treatment!=''], ')')
-sigmodel.df <- dplyr::select(sigmodel.df, Cell.line, Chromatin.feature, Treatment, pval.adj)
+pvalue.heatmap <- sigmodel.df
+pvalue.heatmap$Treatment[pvalue.heatmap$Treatment !=''] <- paste0('(', pvalue.heatmap$Treatment[pvalue.heatmap$Treatment!=''], ')')
+pvalue.heatmap <- dplyr::select(pvalue.heatmap, Cell.line, Chromatin.feature, Treatment, pval.adj)
 
 #pick smallest p-value if multiple models with the same name exist
-sigmodel.df <- dplyr::group_by(sigmodel.df, Cell.line, Chromatin.feature, Treatment) %>%
+pvalue.heatmap <- dplyr::group_by(pvalue.heatmap, Cell.line, Chromatin.feature, Treatment) %>%
   dplyr::mutate(pval.adj=min(pval.adj, na.rm=T)) %>%
   dplyr::distinct(.keep_all = T) %>%
   as.data.frame(., stringsAsFactors=F)
 
-sigmodel.df$pval.adj[is.na(sigmodel.df$pval.adj)] <- -2
-
+pvalue.heatmap$pval.adj[is.na(pvalue.heatmap$pval.adj)] <- -2
 
 #fill `not measured` with NA so that we can color it differently
-sigmodel.mat <- spread(sigmodel.df, "Chromatin.feature", pval.adj)
-rownames(sigmodel.mat) <- paste0(sigmodel.mat$Cell.line, sigmodel.mat$Treatment)
-sigmodel.mat$Cell.line <- NULL
-sigmodel.mat$Treatment <- NULL
+pvalue.heatmap <- spread(pvalue.heatmap, "Chromatin.feature", pval.adj)
+rownames(pvalue.heatmap) <- paste0(pvalue.heatmap$Cell.line, pvalue.heatmap$Treatment)
+pvalue.heatmap$Cell.line <- NULL
+pvalue.heatmap$Treatment <- NULL
 
 f <- function(x){(!is.na(x)) & (x != -2) & (x < 0.1)}
-sigmodel.mat <- sigmodel.mat[rowSums((!f(sigmodel.mat)), na.rm = T) != ncol(sigmodel.mat),]
-sigmodel.mat <- sigmodel.mat[,colSums((!f(sigmodel.mat)), na.rm = T) != nrow(sigmodel.mat)]
+pvalue.heatmap <- pvalue.heatmap[rowSums((!f(pvalue.heatmap)), na.rm = T) != ncol(pvalue.heatmap),]
+pvalue.heatmap <- pvalue.heatmap[,colSums((!f(pvalue.heatmap)), na.rm = T) != nrow(pvalue.heatmap)]
 
 #sort the rows based on the total number of significant models
-ord <- order(rowSums(f(sigmodel.mat), na.rm = T), decreasing = T)
+ord <- order(rowSums(f(pvalue.heatmap), na.rm = T), decreasing = T)
 
 #the models that have no non-zero lasso coef. and the ones that failed the significance test are all
 #represented by the same color
 #set the pvalue of the lasso-dropped models (previously set to 1) somewhere barely above 0.1 so that it'll be painted in gray
-sigmodel.mat[sigmodel.mat == -2] <- 0.1001
+pvalue.heatmap[pvalue.heatmap == -2] <- 0.1001
 
-heatmap.2(as.matrix(sigmodel.mat[ord,]),
+heatmap.2(as.matrix(pvalue.heatmap[ord,]),
           Rowv = F, Colv = F, trace = 'none', dendrogram = 'none', na.color = 'white',
           col=c(colorRampPalette(rev(brewer.pal(9, 'YlOrRd')[-1]),
                                  interpolate='spline')(20), 'gray'),
-          breaks=c(seq(0, 0.1, length.out = 21), max(sigmodel.mat, na.rm = T)),
+          breaks=c(seq(0, 0.1, length.out = 21), max(pvalue.heatmap, na.rm = T)),
           cexRow = 1,
           cexCol = 1,
           keysize = 1,
@@ -365,8 +365,8 @@ heatmap.2(as.matrix(sigmodel.mat[ord,]),
           density.info='none',
           sepwidth=c(0.005,0.005),
           sepcolor="black",
-          colsep=c(seq(0,ncol(sigmodel.mat), 5), ncol(sigmodel.mat)),
-          rowsep=c(seq(0, nrow(sigmodel.mat), 5), nrow(sigmodel.mat)),
-          margins = c(7,13)
+          colsep=c(seq(0,ncol(pvalue.heatmap), 5), ncol(pvalue.heatmap)),
+          rowsep=c(seq(0, nrow(pvalue.heatmap), 5), nrow(pvalue.heatmap)),
+          margins = c(7,17)
 )
 ```
