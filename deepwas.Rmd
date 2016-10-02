@@ -133,9 +133,10 @@ covar.plot.df <- as.data.frame(cbind.data.frame(response, covar))
 covar.plot.df$response <- factor(covar.plot.df$response, labels=c('control','case'))
 covar.plot.df$sex <- factor(covar.plot.df$sex, labels=c('male','female'))
 
+# we can also plot age and gender distribution
 #ggplot(covar.plot.df, aes(x=age)) + geom_bar(color='white') + facet_grid(response~sex) + theme_minimal()
-ggplot(covar.plot.df, aes(x=age)) + geom_bar(aes(fill=sex), color='white') + 
-  facet_wrap(~response) + theme_minimal()+  theme(legend.position = "bottom")
+#ggplot(covar.plot.df, aes(x=age)) + geom_bar(aes(fill=sex), color='white') + 
+#  facet_wrap(~response) + theme_minimal()+  theme(legend.position = "bottom")
 ```
 
 ### Multi-locus regression
@@ -286,13 +287,12 @@ nonzero.models <- names(fits.coeff.len)[fits.coeff.len > 0]
 main.model.dev.ratio <- sort(main.model.dev.ratio[nonzero.models], decreasing = T)
 D <- D[names(main.model.dev.ratio),]
 
-qplot(main.model.dev.ratio, bins=60, color=I('white')) + theme_minimal()
-#pheatmap(D)
+# We can plot deviance ratios as well
+#qplot(main.model.dev.ratio, bins=60, color=I('white')) + theme_minimal()
 
 p.values <- sapply(rownames(D), function(m)mean(D[m,] >= main.model.dev.ratio[m]))
 names(p.values) <- names(main.model.dev.ratio)
 p.values.adj <- p.adjust(p.values, 'fdr')
-head(p.values.adj)
 ```
 
 
