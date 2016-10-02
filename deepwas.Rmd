@@ -110,7 +110,7 @@ qplot(snp.eval.split.len, bins=100,
 Then we read the genotype and phenotype files. Here we have them in PLINK format but there are many other formats available. In addition, dosage files can also be used.
 
 
-```{r readgenotypes}
+```{r readgenotypes, fig.width=8}
 
 # Read plink or dosage ----------------------------------------------------
 
@@ -132,7 +132,10 @@ names(response) <- rownames(pl$genotypes)
 covar.plot.df <- as.data.frame(cbind.data.frame(response, covar))
 covar.plot.df$response <- factor(covar.plot.df$response, labels=c('control','case'))
 covar.plot.df$sex <- factor(covar.plot.df$sex, labels=c('male','female'))
-ggplot(covar.plot.df, aes(x=age)) + geom_bar(color='white') + facet_grid(response~sex) + theme_minimal()
+
+#ggplot(covar.plot.df, aes(x=age)) + geom_bar(color='white') + facet_grid(response~sex) + theme_minimal()
+ggplot(covar.plot.df, aes(x=age)) + geom_bar(aes(fill=sex), color='white') + 
+  facet_wrap(~response) + theme_minimal()+  theme(legend.position = "bottom")
 ```
 
 ### Multi-locus regression
