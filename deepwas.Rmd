@@ -327,7 +327,16 @@ write.table(modelselection.df, 'data/permutation_pvalues.tsv', sep='\t', quote =
 
 ### Visualize model selection
 
-```{r visualizevariableandmodelselection, fig.height=12, fig.width=15}
+```{r visualizevariableandmodelselectionhist, message=FALSE, warning=FALSE}
+
+#first plot a histogram of p-values
+qplot(modelselection.df$pval.adj, xlab='FDR-adjusted p-values',
+      color=I('white'), bins=80)+
+  ggtitle('Model selection: Adjusted p-value distribution') +
+  theme_minimal()
+```
+
+```{r visualizevariableandmodelselection, fig.height=12, fig.width=15, message=FALSE, warning=FALSE}
 # now, plot the pvalue heatmap --------------------------------------------
 pvalue.heatmap <- modelselection.df
 pvalue.heatmap$Treatment[pvalue.heatmap$Treatment !=''] <- paste0('(', pvalue.heatmap$Treatment[pvalue.heatmap$Treatment!=''], ')')
@@ -371,7 +380,7 @@ heatmap.2(as.matrix(pvalue.heatmap[ord,]),
           key.xlab = 'FDR-adjusted p-value',
           density.info='none',
           sepwidth=c(0.005,0.005),
-          sepcolor="black",
+          sepcolor="gray",
           colsep=c(seq(0,ncol(pvalue.heatmap), 5), ncol(pvalue.heatmap)),
           rowsep=c(seq(0, nrow(pvalue.heatmap), 5), nrow(pvalue.heatmap)),
           margins = c(7,17)
@@ -388,12 +397,15 @@ attributes(significant.model.names) <- NULL
 significant.model.coef <- fits.coeff[significant.model.names]
 deepwas.hits <- unique(unlist(significant.model.coef))
 deepwas.hits.df <- do.call(rbind.data.frame,
-                           lapply(names(significant.model.coef),function(m)data.frame(model=m,snp=significant.model.coef[[m]])))
+                           lapply(names(significant.model.coef),function(m)data.frame(model=m,snp=significant.model.coef[[m]],
+                                                                                      stringsAsFactors = F)))
 
 deepwas.hits.df$model.deepsea <- features[match(deepwas.hits.df$model, features.uniq)]
 
-deepwas.hits.df <- cbind(deepwas.hits.df, as.data.frame(do.call(rbind, strsplit(deepwas.hits.df$model.deepsea, '|', fixed = T)), 
-                                                        stringsAsFactors = F))
+deepwas.hits.df <- cbind(deepwas.hits.df,
+                         as.data.frame(do.call(rbind, strsplit(deepwas.hits.df$model.deepsea, '|', fixed = T)),
+                                       stringsAsFactors = F))
+
 deepwas.hits.df <- deepwas.hits.df[, c('V1', 'V2', 'V3', 'snp')]
 colnames(deepwas.hits.df) <- c('Cell.line', 'Chromatin.feature', 'Treatment', 'SNP')
 rownames(deepwas.hits.df) <- NULL
@@ -408,7 +420,7 @@ write.table(deepwas.hits.df, 'data/deepwas_hits.tsv', sep='\t', quote = F, row.n
 ```{r gm12878, fig.height=7, fig.width=5}
 
 gmhits <- subset(deepwas.hits.df, Cell.line == 'GM12878', select=c('Chromatin.feature', 'SNP'))
-gmhits$exists <- 1 
+gmhits$exists <- 1
 gmhits.heatmap <- spread(gmhits, Chromatin.feature, exists, fill = 0)
 rownames(gmhits.heatmap) <- gmhits.heatmap$SNP
 gmhits.heatmap$SNP <- NULL
