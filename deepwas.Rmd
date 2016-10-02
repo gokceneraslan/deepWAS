@@ -287,7 +287,7 @@ head(p.values.adj)
 ```
 
 
-#### Summarize everything as a tsv file
+#### Summarize model selection information as a tsv file
 
 ```{r generatesummaryfile}
 # create a dataframe with all models, pvalues and deviance values
@@ -300,29 +300,30 @@ sigmodel.pvalues <- c(p.values.adj, failed.lasso.pvals)
 sigmodel.pvalues.orig <- c(p.values, failed.lasso.pvals)
 sigmodel.names <- features[match(names(sigmodel.pvalues), features.uniq)]
 sigmodel.names.uniq <- features.uniq[match(names(sigmodel.pvalues), features.uniq)]
-sigmodel.df <- as.data.frame(do.call(rbind, strsplit(sigmodel.names, '|', fixed = T)), stringsAsFactors = F)
-colnames(sigmodel.df) <- c('Cell.line', 'Chromatin.feature', 'Treatment')
-sigmodel.df$pval.adj <- sigmodel.pvalues
-sigmodel.df$pval <- sigmodel.pvalues.orig
-sigmodel.df$codename <- sigmodel.names.uniq
-sigmodel.df$deepsea.name <- sigmodel.names
+
+modelselection.df <- as.data.frame(do.call(rbind, strsplit(sigmodel.names, '|', fixed = T)), stringsAsFactors = F)
+colnames(modelselection.df) <- c('Cell.line', 'Chromatin.feature', 'Treatment')
+modelselection.df$pval.adj <- sigmodel.pvalues
+modelselection.df$pval <- sigmodel.pvalues.orig
+modelselection.df$codename <- sigmodel.names.uniq
+modelselection.df$deepsea.name <- sigmodel.names
 ```
 
 
 ```{r}
-sigmodel.df$Treatment <- gsub('None', '', gsub('\\.[1-9]$', '', sigmodel.df$Treatment))
-sigmodel.df$devratio <- main.model.dev.ratio[match(sigmodel.df$codename, names(main.model.dev.ratio))]
-sigmodel.df <- sigmodel.df[order(sigmodel.df$pval.adj),]
-rownames(sigmodel.df) <- NULL
-head(select(sigmodel.df, -codename, -deepsea.name), 12)
-write.table(sigmodel.df, 'data/permutation_pvalues.tsv', sep='\t', quote = F, row.names = F)
+modelselection.df$Treatment <- gsub('None', '', gsub('\\.[1-9]$', '', modelselection.df$Treatment))
+modelselection.df$devratio <- main.model.dev.ratio[match(modelselection.df$codename, names(main.model.dev.ratio))]
+modelselection.df <- modelselection.df[order(modelselection.df$pval.adj),]
+rownames(modelselection.df) <- NULL
+head(select(modelselection.df, -codename, -deepsea.name), 12)
+write.table(modelselection.df, 'data/permutation_pvalues.tsv', sep='\t', quote = F, row.names = F)
 ```
 
-#### Visualize variable and model selection
+### Visualize model selection
 
 ```{r visualizevariableandmodelselection, fig.height=12, fig.width=15}
 # now, plot the pvalue heatmap --------------------------------------------
-pvalue.heatmap <- sigmodel.df
+pvalue.heatmap <- modelselection.df
 pvalue.heatmap$Treatment[pvalue.heatmap$Treatment !=''] <- paste0('(', pvalue.heatmap$Treatment[pvalue.heatmap$Treatment!=''], ')')
 pvalue.heatmap <- dplyr::select(pvalue.heatmap, Cell.line, Chromatin.feature, Treatment, pval.adj)
 
@@ -370,3 +371,27 @@ heatmap.2(as.matrix(pvalue.heatmap[ord,]),
           margins = c(7,17)
 )
 ```
+
+#### Save DeepWAS hits in a tsv file
+
+```{r savehits}
+
+significant.model.names <- na.omit(modelselection.df$codename[ modelselection.df$pval.adj < 0.1])
+attributes(significant.model.names) <- NULL
+
+significant.model.coef <- fits.coeff[significant.model.names]
+deepwas.hits <- unique(unlist(significant.model.coef))
+deepwas.hits.df <- do.call(rbind.data.frame,
+                           lapply(names(significant.model.coef),function(m)data.frame(model=m,snp=significant.model.coef[[m]])))
+
+deepwas.hits.df$model.deepsea <- features[match(deepwas.hits.df$model, features.uniq)]
+
+deepwas.hits.df <- cbind(deepwas.hits.df, as.data.frame(do.call(rbind, strsplit(deepwas.hits.df$model.deepsea, '|', fixed = T)), 
+                                                        stringsAsFactors = F))
+deepwas.hits.df <- deepwas.hits.df[, c('V1', 'V2', 'V3', 'snp')]
+colnames(deepwas.hits.df) <- c('Cell.line', 'Chromatin.feature', 'Treatment', 'SNP')
+
+head(deepwas.hits.df)
+write.table(deepwas.hits.df, 'data/deepwas_hits.tsv', sep='\t', quote = F, row.names = F)
+```
+
