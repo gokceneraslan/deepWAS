@@ -34,6 +34,7 @@ library(snpStats)
 
 #Visualization and reporting
 library(ggplot2)
+#library(ggfortify)
 library(ggrepel)
 library(RColorBrewer)
 library(gplots)
@@ -138,6 +139,19 @@ covar.plot.df$sex <- factor(covar.plot.df$sex, labels=c('male','female'))
 #ggplot(covar.plot.df, aes(x=age)) + geom_bar(aes(fill=sex), color='white') + 
 #  facet_wrap(~response) + theme_minimal()+  theme(legend.position = "bottom")
 ```
+
+### PCA
+
+We can perform PCA on genotypes and add first few components to the regression as covariates.
+
+```{r pca}
+pca <- prcomp(as(pl$genotypes, 'numeric'), scale. = T)
+pairs(pca$x[,1:5])
+#autoplot(pca) + theme_minimal()
+covar <- cbind(covar, pca$x[,1:15])
+```
+
+## Perform GWAS only on regulatory variants to have a baseline
 
 ### Multi-locus regression
 
