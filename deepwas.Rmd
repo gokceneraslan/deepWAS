@@ -268,7 +268,7 @@ if (file.exists('data/permutation_models.Rds') &&
       f <- cv.glmnet(mat,
                      response,
                      alpha=1,
-                     #nfolds = 100, # too slow
+                     nfolds = 100,
                      family='binomial')
       glmnet(mat,
              response,
@@ -298,6 +298,7 @@ For all 1000 permutations and 919 models, `U` matrix ($1000\times919$) stores th
 ```{r calculateempiricalpvals}
 #perform model selection only on models with non-zero coef.
 nonzero.models <- names(fits.coeff.len)[fits.coeff.len > 0]
+
 main.model.dev.ratio <- sort(main.model.dev.ratio[nonzero.models], decreasing = T)
 D <- D[names(main.model.dev.ratio),]
 
@@ -336,7 +337,7 @@ modelselection.df$deepsea.name <- sigmodel.names
 ```{r}
 modelselection.df$Treatment <- gsub('None', '', gsub('\\.[1-9]$', '', modelselection.df$Treatment))
 modelselection.df$devratio <- main.model.dev.ratio[match(modelselection.df$codename, names(main.model.dev.ratio))]
-modelselection.df <- modelselection.df[order(modelselection.df$pval.adj),]
+modelselection.df <- modelselection.df[order(modelselection.df$pval),]
 rownames(modelselection.df) <- NULL
 head(select(modelselection.df, -codename, -deepsea.name), 12)
 write.table(modelselection.df, 'data/permutation_pvalues.tsv', sep='\t', quote = F, row.names = F)
