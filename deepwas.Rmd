@@ -48,6 +48,7 @@ library(tidyr)
 library(dplyr) #at least 0.5.0
 
 set.seed(42)
+ncores <- 12
 ```
 ## Analysis
 
@@ -153,6 +154,20 @@ covar <- cbind(covar, pca$x[,1:15])
 
 ## Perform GWAS only on regulatory variants to have a baseline
 
+```{r gwas}
+if (file.exists('data/gwas.Rds')) {
+  gwas <- readRDS('data/gwas.Rds') 
+} else {
+  gwas <- mclapply(colnames(pl$genotypes), function(variant){
+    mat <- cbind.data.frame(response, as(pl$genotypes[, variant], 'numeric'), covar)
+    fit <- glm(response ~ ., family = binomial, data=mat, model=F, x=F)
+    fit$data <- NULL
+    fit
+  }, mc.cores = ncores)
+  saveRDS(gwas, 'data/gwas.Rds')
+}
+```
+
 ### Multi-locus regression
 
 Next step is to fit regularized logistic regression models on grouped set of variants to investigate the association between set of variants and the disease in a specific context of cell line, transcription factor (or chromatin feature) and treatment.
@@ -174,7 +189,7 @@ if (file.exists('data/models.Rds')) {
                      alpha=1,
                      family='binomial')
     fit
-  }, mc.cores = 12)
+  }, mc.cores = ncores)
 
   names(cv.fits) <- features.uniq
   saveRDS(cv.fits, 'data/models.Rds')
@@ -278,7 +293,7 @@ if (file.exists('data/permutation_models.Rds') &&
     })
 
     list(fit=fit, devi=devi)
-  }, mc.cores = 12)
+  }, mc.cores = ncores)
 
   names(U) <- features.uniq
   main.model.dev.ratio <- sapply(U, function(feature)feature$fit$dev.ratio)
