@@ -146,7 +146,12 @@ covar.plot.df$sex <- factor(covar.plot.df$sex, labels=c('male','female'))
 We can perform PCA on genotypes and add first few components to the regression as covariates.
 
 ```{r pca}
-pca <- prcomp(as(pl$genotypes, 'numeric'), scale. = T)
+if(file.exists('data/pca.Rds')) {
+  pca <- readRDS('data/pca.Rds')
+} else {
+  pca <- prcomp(as(pl$genotypes, 'numeric'), scale. = T)
+  saveRDS(pca, 'data/pca.Rds')
+}
 pairs(pca$x[,1:5])
 #autoplot(pca) + theme_minimal()
 covar <- cbind(covar, pca$x[,1:15])
