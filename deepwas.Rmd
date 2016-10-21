@@ -443,5 +443,37 @@ gmhits.heatmap <- spread(gmhits, Chromatin.feature, exists, fill = 0)
 rownames(gmhits.heatmap) <- gmhits.heatmap$SNP
 gmhits.heatmap$SNP <- NULL
 pheatmap(gmhits.heatmap, color = c("#e5f5e0", "#31a354"), border_color = 'lightgray')
+
 ```
 
+
+### Bootstrapping
+
+```{r}
+
+feature <- 'GM12878.MEF2C.None'
+
+nperm <- 1000
+perm.mat <- sapply(seq_len(nperm), function(x)sample(length(ind.ids), replace = T))
+stopifnot(ncol(perm.mat) == nperm)
+
+mat <- cbind(as(pl$genotypes[, snp.eval.split[[feature]]], 'numeric'),
+             covar)
+
+# coef.matrix <- mclapply(seq_len(nperm), function(perm.index) {
+#   fit <- cv.glmnet(mat[perm.mat[,perm.index],],
+#                 response[perm.mat[,perm.index]],
+#                 alpha=1,
+#                 nfolds = 100,
+#                 family='binomial')
+#   res <- as.vector(coef(fit, s=fit$lambda.1se))
+#   names(res) <- rownames(coef(fit))
+#   res
+# }, mc.cores = 12)
+# 
+# coef.matrix <- simplify2array(coef.matrix)
+# coef.df <- gather(as.data.frame(t(coef.matrix))[,-1], 'predictor', 'coefficient')
+# ggplot(coef.df, aes(predictor, coefficient)) + 
+#   geom_boxplot(outlier.shape = NA) +
+#   coord_flip() + theme_minimal()
+```
